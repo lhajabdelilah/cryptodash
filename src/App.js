@@ -1,72 +1,97 @@
 import React, { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, MoreVertical, Share2, Star } from 'lucide-react';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from 'recharts';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 const CryptoDashboard = () => {
   const [cryptoData, setCryptoData] = useState([]);
-  const [bitcoinPrice, setBitcoinPrice] = useState(0);
+  const [bitcoin, setBitcoin] = useState({});
   const [loading, setLoading] = useState(true);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('m1'); // Valeur par défaut
   const [priceHistory, setPriceHistory] = useState([]);
-  const [selectedTimeframe, setSelectedTimeframe] = useState('24h');
 
   const fetchCryptoData = async () => {
     try {
-      const response = await fetch('https://api.coincap.io/v2/assets');
-      const data = await response.json();
-      setCryptoData(data.data);
+      // Récupération des données des crypto-monnaies
+      const cryptoResponse = await fetch('https://api.coincap.io/v2/assets');
+      const cryptoJson = await cryptoResponse.json();
+      setCryptoData(cryptoJson.data);
 
+      // Récupération des informations spécifiques pour Bitcoin
       const bitcoinResponse = await fetch('https://api.coincap.io/v2/assets/bitcoin');
-      const bitcoinData = await bitcoinResponse.json();
-      const newPrice = parseFloat(bitcoinData.data.priceUsd);
+      const bitcoinJson = await bitcoinResponse.json();
+      setBitcoin(bitcoinJson.data);
 
-      const timestamp = new Date().toLocaleTimeString();
-      setPriceHistory((prev) => [...prev.slice(-30), { time: timestamp, price: newPrice }]);
-
-      setBitcoinPrice(newPrice);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching crypto data:', error);
+      console.error('Erreur lors de la récupération des données', error);
       setLoading(false);
     }
   };
+  const fetchPriceHistory = async () => {
+    try {
+      const url = `https://api.coincap.io/v2/assets/bitcoin/history?interval=${selectedTimeframe}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      const formattedData = data.data.map((point) => ({
+        time: new Date(point.time).toLocaleDateString() + ' ' + new Date(point.time).toLocaleTimeString(),
+        price: parseFloat(point.priceUsd),
+      }));
+      setPriceHistory(formattedData);
+    } catch (error) {
+      console.error('Error fetching price history:', error);
+    }
+  };
+
+
+  useEffect(() => {
+    fetchPriceHistory();
+  }, [selectedTimeframe]);
+
+  // const formatNumber = (value) => {
+  //   return new Intl.NumberFormat('en-US', {
+  //     style: 'currency',
+  //     currency: 'USD',
+  //     minimumFractionDigits: 2,
+  //     maximumFractionDigits: 2,
+  //   }).format(value);
+  // };
+
+  // const formatPercentage = (value) => {
+  //   return typeof value === 'number' ? `${value.toFixed(2)}%` : 'N/A';
+  // };
+
+  const timeframeButtons = [
+    { label: '1h', value: 'm1' },
+    { label: '24h', value: 'm15' },
+    { label: '7d', value: 'h1' },
+    { label: '30d', value: 'd1' },
+    { label: '1y', value: 'd1' }, // CoinCap API uses daily intervals for longer timeframes
+  ];
 
   useEffect(() => {
     fetchCryptoData();
-    const interval = setInterval(fetchCryptoData, 10000);
+    const interval = setInterval(fetchCryptoData, 10000); // Actualisation toutes les 10 secondes
     return () => clearInterval(interval);
   }, []);
 
-  const formatNumber = (value) => {
-    return new Intl.NumberFormat('en-US', {
+  const formatNumber = (value) =>
+    new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
       notation: 'compact',
-      compactDisplay: 'short'
+      compactDisplay: 'short',
     }).format(value);
-  };
 
-  const formatPercentage = (value) => {
-    return typeof value === 'number' ? `${value.toFixed(2)}%` : 'N/A';
-  };
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-dark p-3 rounded shadow-sm border border-secondary">
-          <p className="text-light mb-1">{`Time: ${label}`}</p>
-          <p className="fw-bold text-info mb-0">
-            {formatNumber(payload[0].value)}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const timeframeButtons = ['1h', '24h', '7d', '30d'];
+    const formatPercentage = (value) => {
+      if (isNaN(value)) return 'N/A';
+      return `${value.toFixed(2)}%`;
+    };
+    
 
   if (loading) {
     return (
@@ -79,159 +104,100 @@ const CryptoDashboard = () => {
   }
 
   return (
-    <div className="min-vh-100 bg-dark text-light">
-      <div className="container-fluid py-4">
-        <div className="card bg-dark border-secondary">
-          <div className="card-body">
-            <h1 className="card-title h3 mb-4">Crypto Market Overview</h1>
-
-            <div className="row mb-4">
-              <div className="col-md-6 mb-3 mb-md-0">
-                <div className="card bg-secondary">
-                  <div className="card-body">
-                    <h3 className="card-title h5 text-light mb-3">Bitcoin Price</h3>
-                    <div className="d-flex align-items-center">
-                      <span className="h2 mb-0 text-info me-3">
-                        {formatNumber(bitcoinPrice)}
-                      </span>
-                      <span className="d-flex align-items-center text-success">
-                        <TrendingUp className="me-1" size={20} />
-                        +2.4%
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="col-md-6">
-                <div className="card bg-secondary">
-                  <div className="card-body">
-                    <h3 className="card-title h5 text-light mb-3">Market Cap</h3>
-                    <span className="h2 mb-0 text-info">
-                      {formatNumber(cryptoData[0]?.marketCapUsd || 0)}
-                    </span>
-                  </div>
-                </div>
+    <div className="bg-dark text-light min-vh-100">
+      <div className="container py-5">
+        {/* Header avec prix actuel de Bitcoin */}
+        <div className="mb-5">
+          <h1 className="text-info mb-3">Crypto Dashboard</h1>
+          <div className="row">
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>Bitcoin Price</h5>
+                <h3 className="text-info">  {bitcoin.priceUsd ? formatNumber(bitcoin.priceUsd) : 'Loading...'}</h3>
               </div>
             </div>
-
-            <div className="btn-group mb-4">
-              {timeframeButtons.map((timeframe) => (
-                <button
-                  key={timeframe}
-                  className={`btn ${
-                    selectedTimeframe === timeframe
-                      ? 'btn-primary'
-                      : 'btn-outline-secondary'
-                  }`}
-                  onClick={() => setSelectedTimeframe(timeframe)}
-                >
-                  {timeframe}
-                </button>
-              ))}
-            </div>
-
-            <div className="card bg-secondary mb-4">
-              <div className="card-body" style={{ height: '400px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={priceHistory}>
-                    <defs>
-                      <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0dcaf0" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#0dcaf0" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#6c757d" />
-                    <XAxis 
-                      dataKey="time" 
-                      stroke="#adb5bd"
-                      fontSize={12}
-                      tickLine={false}
-                    />
-                    <YAxis 
-                      stroke="#adb5bd"
-                      fontSize={12}
-                      tickLine={false}
-                      tickFormatter={(value) => formatNumber(value)}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line
-                      type="monotone"
-                      dataKey="price"
-                      stroke="#0dcaf0"
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 8 }}
-                      fill="url(#colorPrice)"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>24h Change</h5>
+                <h3 className={bitcoin.changePercent24Hr >= 0 ? 'text-success' : 'text-danger'}>
+                  {formatPercentage(parseFloat(bitcoin.changePercent24Hr))}
+                  {bitcoin.changePercent24Hr >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                </h3>
               </div>
             </div>
-
-            <div className="table-responsive">
-              <table className="table table-dark table-hover">
-                <thead>
-                  <tr>
-                    <th scope="col">Asset</th>
-                    <th scope="col">Price</th>
-                    <th scope="col">Change (24h)</th>
-                    <th scope="col">Market Cap</th>
-                    <th scope="col" className="text-end">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cryptoData.slice(0, 10).map((crypto) => (
-                    <tr key={crypto.id}>
-                      <td>
-                        <div className="d-flex align-items-center">
-                          <div className="rounded-circle bg-primary d-flex align-items-center justify-content-center me-3" style={{ width: '40px', height: '40px' }}>
-                            <span className="text-light fw-bold">
-                              {crypto.symbol.charAt(0)}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="fw-bold">{crypto.name}</div>
-                            <small className="text-muted">{crypto.symbol}</small>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="align-middle">
-                        {formatNumber(crypto.priceUsd)}
-                      </td>
-                      <td className="align-middle">
-                        <div className={`d-flex align-items-center ${
-                          crypto.changePercent24Hr >= 0 ? 'text-success' : 'text-danger'
-                        }`}>
-                          {crypto.changePercent24Hr >= 0 ? (
-                            <TrendingUp size={16} className="me-1" />
-                          ) : (
-                            <TrendingDown size={16} className="me-1" />
-                          )}
-                          {formatPercentage(crypto.changePercent24Hr)}
-                        </div>
-                      </td>
-                      <td className="align-middle text-muted">
-                        {formatNumber(crypto.marketCapUsd)}
-                      </td>
-                      <td className="align-middle text-end">
-                        <div className="btn-group">
-                          <button className="btn btn-outline-secondary btn-sm">
-                            <Star size={16} />
-                          </button>
-                          <button className="btn btn-outline-secondary btn-sm">
-                            <Share2 size={16} />
-                          </button>
-                          <button className="btn btn-outline-secondary btn-sm">
-                            <MoreVertical size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>Market Cap</h5>
+                <h3 className="text-info">{formatNumber(bitcoin.marketCapUsd)}</h3>
+              </div>
             </div>
           </div>
+        </div>
+        <div className="container-fluid py-4">
+        <h1 className="mb-4">Crypto Dashboard</h1>
+        <div className="btn-group mb-4">
+          {timeframeButtons.map(({ label, value }) => (
+            <button
+              key={value}
+              className={`btn ${
+                selectedTimeframe === value
+                  ? 'btn-primary'
+                  : 'btn-outline-secondary'
+              }`}
+              onClick={() => setSelectedTimeframe(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <ResponsiveContainer width="100%" height={400}>
+          <LineChart data={priceHistory}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="time" tick={{ fill: '#fff' }} />
+            <YAxis tick={{ fill: '#fff' }} />
+            <Tooltip />
+            <Line
+              type="monotone"
+              dataKey="price"
+              stroke="#0dcaf0"
+              strokeWidth={2}
+              dot={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+        {/* Tableau descriptif */}
+        <div className="table-responsive bg-secondary rounded p-4">
+          <h4 className="text-light mb-4">Top Cryptocurrencies</h4>
+          <table className="table table-dark table-hover">
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Asset</th>
+                <th scope="col">Price</th>
+                <th scope="col">24h Change</th>
+                <th scope="col">Market Cap</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cryptoData.slice(0, 10).map((crypto, index) => (
+                <tr key={crypto.id}>
+                  <td>{index + 1}</td>
+                  <td>
+                    <div>
+                      <strong>{crypto.name}</strong> <small>({crypto.symbol})</small>
+                    </div>
+                  </td>
+                  <td>{formatNumber(crypto.priceUsd)}</td>
+                  <td className={crypto.changePercent24Hr >= 0 ? 'text-success' : 'text-danger'}>
+                    {formatPercentage(parseFloat(crypto.changePercent24Hr))}
+                  </td>
+                  <td>{formatNumber(crypto.marketCapUsd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
