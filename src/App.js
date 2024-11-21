@@ -3,14 +3,36 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { TrendingUp, TrendingDown } from 'lucide-react';
+import { FaSun, FaMoon } from 'react-icons/fa'; // Import des icônes pour les modes
 import 'bootstrap/dist/css/bootstrap.min.css';
+import { io } from "socket.io-client";
+import BitcoinKpiChart from './kpi';
+
 
 const CryptoDashboard = () => {
+  const [predictedPrice, setPredictedPrice] = useState(null);
   const [cryptoData, setCryptoData] = useState([]);
   const [bitcoin, setBitcoin] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedTimeframe, setSelectedTimeframe] = useState('m1'); // Valeur par défaut
   const [priceHistory, setPriceHistory] = useState([]);
+  const [isDarkMode, setIsDarkMode] = useState(true); // État pour gérer le thème
+
+  const SOCKET_URL = "http://localhost:5000"; // L'URL de votre backend Flask
+  useEffect(() => {
+    // Connexion au backend Flask via Socket.IO
+    const socket = io(SOCKET_URL);
+
+    // Écouter les mises à jour du prix
+    socket.on("update_price", (data) => {
+      setPredictedPrice(data.predicted_price);
+    });
+
+    // Déconnexion propre lorsque le composant est démonté
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   const fetchCryptoData = async () => {
     try {
@@ -91,7 +113,10 @@ const CryptoDashboard = () => {
       if (isNaN(value)) return 'N/A';
       return `${value.toFixed(2)}%`;
     };
-    
+  const toggleTheme = () => {
+      setIsDarkMode(!isDarkMode);
+    };
+  
 
   if (loading) {
     return (
@@ -103,23 +128,32 @@ const CryptoDashboard = () => {
     );
   }
 
+
+
   return (
-    <div className="bg-dark text-light min-vh-100">
+    <div className={`${isDarkMode ? 'bg-dark text-light' : 'bg-light text-dark'} text-light min-vh-100`}>
       <div className="container py-5">
         {/* Header avec prix actuel de Bitcoin */}
         <div className="mb-5">
           <h1 className="text-info mb-3">Crypto Dashboard</h1>
+          <h1 className="text-info">Crypto Dashboard</h1>
+          <button
+            className="btn btn-outline-primary"
+            onClick={toggleTheme}
+          >
+            {isDarkMode ? <FaSun size={20} /> : <FaMoon size={20} />}
+          </button>
           <div className="row">
             <div className="col-lg-4 mb-4">
               <div className="card bg-secondary text-light p-3">
                 <h5>Bitcoin Price</h5>
-                <h3 className="text-info">  {bitcoin.priceUsd ? formatNumber(bitcoin.priceUsd) : 'Loading...'}</h3>
+                <h3 className="text-info">  {bitcoin.priceUsd ? bitcoin.priceUsd : 'Loading...'}</h3>
               </div>
             </div>
             <div className="col-lg-4 mb-4">
               <div className="card bg-secondary text-light p-3">
                 <h5>24h Change</h5>
-                <h3 className={bitcoin.changePercent24Hr >= 0 ? 'text-success' : 'text-danger'}>
+                <h3 className={bitcoin.changePercent24Hr >= 0 ? 'text-info' : 'text-danger'}>
                   {formatPercentage(parseFloat(bitcoin.changePercent24Hr))}
                   {bitcoin.changePercent24Hr >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
                 </h3>
@@ -131,8 +165,28 @@ const CryptoDashboard = () => {
                 <h3 className="text-info">{formatNumber(bitcoin.marketCapUsd)}</h3>
               </div>
             </div>
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>Volume 24h</h5>
+                <h3 className="text-info">{formatNumber(bitcoin.volumeUsd24Hr)}</h3>
+              </div>
+            </div>
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>predicted price</h5>
+                <h3 className="text-info">{predictedPrice !== null ? (
+                <p> {predictedPrice.toFixed(2)} USD</p>
+                  ) : (
+                    <p>Chargement des données...</p>
+                  )}
+              </h3>
+              </div>
+            </div>
           </div>
         </div>
+
+ <BitcoinKpiChart/>
+
         <div className="container-fluid py-4">
         <h1 className="mb-4">Crypto Dashboard</h1>
         <div className="btn-group mb-4">
@@ -199,6 +253,7 @@ const CryptoDashboard = () => {
             </tbody>
           </table>
         </div>
+        
       </div>
     </div>
   );
