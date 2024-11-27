@@ -1,79 +1,135 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, MoreVertical, Share2, Star } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 const CryptoDashboard = () => {
   const [cryptoData, setCryptoData] = useState([]);
-  const [bitcoinPrice, setBitcoinPrice] = useState(0);
+  const [bitcoin, setBitcoin] = useState({});
   const [loading, setLoading] = useState(true);
+  const [selectedTimeframe, setSelectedTimeframe] = useState('m1');
   const [priceHistory, setPriceHistory] = useState([]);
-  const [priceChange, setPriceChange] = useState(0);
+  const [technicalData, setTechnicalData] = useState([]);
 
-  const fetchCryptoData = useCallback(async () => {
+  // Fetch crypto data and Bitcoin data
+  const fetchCryptoData = async () => {
     try {
-      const response = await fetch('https://api.coincap.io/v2/assets');
-      const data = await response.json();
-      setCryptoData(data.data);
+      const cryptoResponse = await fetch('https://api.coincap.io/v2/assets');
+      const cryptoJson = await cryptoResponse.json();
+      setCryptoData(cryptoJson.data);
 
       const bitcoinResponse = await fetch('https://api.coincap.io/v2/assets/bitcoin');
-      const bitcoinData = await bitcoinResponse.json();
-      const newPrice = parseFloat(bitcoinData.data.priceUsd);
+      const bitcoinJson = await bitcoinResponse.json();
+      setBitcoin(bitcoinJson.data);
 
-      // Calculate price change
-      if (priceHistory.length > 0) {
-        const lastPrice = priceHistory[priceHistory.length - 1].price;
-        const change = ((newPrice - lastPrice) / lastPrice) * 100;
-        setPriceChange(change);
-      }
-
-      const timestamp = new Date().toLocaleTimeString();
-      setPriceHistory((prev) => {
-        // Keep only the last 50 entries to prevent memory issues
-        const updatedHistory = [...prev, { time: timestamp, price: newPrice }];
-        return updatedHistory.slice(-50);
-      });
-
-      setBitcoinPrice(newPrice);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching crypto data:', error);
       setLoading(false);
     }
-  }, [priceHistory]);
+  };
+
+  // Fetch Bitcoin price history
+  const fetchPriceHistory = async () => {
+    try {
+      const url = `https://api.coincap.io/v2/assets/bitcoin/history?interval=${selectedTimeframe}`;
+      const response = await fetch(url);
+      const data = await response.json();
+      const formattedData = data.data.map((point) => ({
+        time: new Date(point.time).toLocaleDateString() + ' ' + new Date(point.time).toLocaleTimeString(),
+        price: parseFloat(point.priceUsd),
+      }));
+      setPriceHistory(formattedData);
+      calculateTechnicalIndicators(formattedData);
+    } catch (error) {
+      console.error('Error fetching price history:', error);
+    }
+  };
+
+  // Calculate Simple Moving Average (SMA)
+  const calculateSMA = (data, period) => {
+    const sma = [];
+    for (let i = period - 1; i < data.length; i++) {
+      const slice = data.slice(i - period + 1, i + 1);
+      const avg = slice.reduce((sum, point) => sum + point.price, 0) / period;
+      sma.push({ ...data[i], sma: avg });
+    }
+    return sma;
+  };
+
+  // Calculate Relative Strength Index (RSI)
+  const calculateRSI = (data, period) => {
+    const rsi = [];
+    for (let i = period; i < data.length; i++) {
+      const slice = data.slice(i - period, i);
+      const gains = slice.filter((point, index) =>
+        index > 0 ? point.price > slice[index - 1].price : false
+      );
+      const losses = slice.filter((point, index) =>
+        index > 0 ? point.price < slice[index - 1].price : false
+      );
+
+      const avgGain = gains.length > 0 ? gains.reduce((sum, point) => sum + point.price, 0) / gains.length : 0;
+      const avgLoss = losses.length > 0 ? losses.reduce((sum, point) => sum + Math.abs(point.price), 0) / losses.length : 0;
+
+      const rs = avgGain / (avgLoss || 1);
+      rsi.push({ ...data[i], rsi: 100 - 100 / (1 + rs) });
+    }
+    return rsi;
+  };
+
+  // Calculate both SMA and RSI
+  const calculateTechnicalIndicators = (data) => {
+    const smaData = calculateSMA(data, 7); // 7-period SMA
+    const rsiData = calculateRSI(data, 14); // 14-period RSI
+
+    // Merge SMA and RSI data
+    const mergedData = smaData.map((item, index) => ({
+      ...item,
+      rsi: rsiData[index]?.rsi || null,
+    }));
+    setTechnicalData(mergedData);
+  };
+
+  useEffect(() => {
+    fetchPriceHistory();
+  }, [selectedTimeframe]);
 
   useEffect(() => {
     fetchCryptoData();
-    const interval = setInterval(fetchCryptoData, 3000); // Fetch every 3 seconds for more real-time updates
+    const interval = setInterval(fetchCryptoData, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, [fetchCryptoData]);
+  }, []);
 
-  const formatNumber = (value) => {
-    return new Intl.NumberFormat('en-US', {
+  const timeframeButtons = [
+    { label: '1h', value: 'm1' },
+    { label: '24h', value: 'm15' },
+    { label: '7d', value: 'h1' },
+    { label: '30d', value: 'd1' },
+    { label: '1y', value: 'd1' },
+  ];
+
+  const formatNumber = (value) =>
+    new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
-      maximumFractionDigits: 6, // Increased decimal places for more precision
-      notation: 'standard', // Changed from 'compact' to show full precision
+      maximumFractionDigits: 2,
+      notation: 'compact',
+      compactDisplay: 'short',
     }).format(value);
-  };
 
   const formatPercentage = (value) => {
-    return typeof value === 'number' ? `${value.toFixed(4)}%` : 'N/A';
-  };
-
-  const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-dark p-3 rounded shadow-sm border border-secondary">
-          <p className="text-light mb-1">{`Time: ${label}`}</p>
-          <p className="fw-bold text-info mb-0">
-            {formatNumber(payload[0].value)}
-          </p>
-        </div>
-      );
-    }
-    return null;
+    if (isNaN(value)) return 'N/A';
+    return `${value.toFixed(2)}%`;
   };
 
   if (loading) {
@@ -86,154 +142,78 @@ const CryptoDashboard = () => {
     );
   }
 
-  // Improved Y-axis range calculation with more sensitivity
-  const minPrice = Math.min(...priceHistory.map((entry) => entry.price)) * 0.9999; // Minimal padding
-  const maxPrice = Math.max(...priceHistory.map((entry) => entry.price)) * 1.0001;
-
   return (
-    <div className="min-vh-100 bg-dark text-light">
-      <div className="container-fluid py-4">
-        <div className="card bg-dark border-secondary">
-          <div className="card-body">
-            <h1 className="card-title h3 mb-4">Crypto Market Overview</h1>
-
-            <div className="row mb-4">
-              <div className="col-md-6 mb-3 mb-md-0">
-                <div className="card bg-secondary">
-                  <div className="card-body">
-                    <h3 className="card-title h5 text-light mb-3">Bitcoin Price</h3>
-                    <div className="d-flex align-items-center">
-                      <span className="h2 mb-0 text-info me-3">
-                        {formatNumber(bitcoinPrice)}
-                      </span>
-                      <span 
-                        className={`d-flex align-items-center ${
-                          priceChange >= 0 ? 'text-success' : 'text-danger'
-                        }`}
-                      >
-                        {priceChange >= 0 ? <TrendingUp className="me-1" size={20} /> : <TrendingDown className="me-1" size={20} />}
-                        {formatPercentage(priceChange)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              {/* ... (reste du code inchangé) ... */}
-            </div>
-
-            {/* Graphique avec configurations améliorées */}
-            <div className="card bg-secondary mb-4">
-              <div className="card-body" style={{ height: '500px' }}> {/* Augmenté la hauteur */}
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={priceHistory}>
-                    <defs>
-                      <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0dcaf0" stopOpacity={0.3} /> {/* Augmenté l'opacité */}
-                        <stop offset="95%" stopColor="#0dcaf0" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#6c757d" />
-                    <XAxis
-                      dataKey="time"
-                      stroke="#adb5bd"
-                      fontSize={12}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      stroke="#adb5bd"
-                      fontSize={12}
-                      tickLine={false}
-                      domain={[minPrice, maxPrice]} // Plage dynamique très sensible
-                      tickFormatter={(value) => formatNumber(value)}
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line
-                      type="monotone"
-                      dataKey="price"
-                      stroke="#0dcaf0"
-                      strokeWidth={3} // Épaisseur du trait augmentée
-                      dot={false}
-                      activeDot={{ r: 6 }} // Taille du point actif
-                      fill="url(#colorPrice)"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+    <div className="bg-dark text-light min-vh-100">
+      <div className="container py-5">
+        {/* Header */}
+        <div className="mb-5">
+          <h1 className="text-info mb-3">Crypto Dashboard</h1>
+          <div className="row">
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>Bitcoin Price</h5>
+                <h3 className="text-info">
+                  {bitcoin.priceUsd ? formatNumber(bitcoin.priceUsd) : 'Loading...'}
+                </h3>
               </div>
             </div>
-
-            {/* ... (reste du code inchangé) ... */}
-  <div className="table-responsive">
-              <table className="table table-dark table-hover">
-                <thead>
-                  <tr>
-                    <th scope="col">Asset</th>
-                    <th scope="col">Price</th>
-                    <th scope="col">Change (24h)</th>
-                    <th scope="col">Market Cap</th>
-                    <th scope="col" className="text-end">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cryptoData.slice(0, 10).map((crypto) => (
-                    <tr key={crypto.id}>
-                      <td>
-                        <div className="d-flex align-items-center">
-                          <div
-                            className="rounded-circle bg-primary d-flex align-items-center justify-content-center me-3"
-                            style={{ width: '40px', height: '40px' }}
-                          >
-                            <span className="text-light fw-bold">
-                              {crypto.symbol.charAt(0)}
-                            </span>
-                          </div>
-                          <div>
-                            <div className="fw-bold">{crypto.name}</div>
-                            <small className="text-muted">{crypto.symbol}</small>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="align-middle">
-                        {formatNumber(crypto.priceUsd)}
-                      </td>
-                      <td className="align-middle">
-                        <div
-                          className={`d-flex align-items-center ${
-                            crypto.changePercent24Hr >= 0
-                              ? 'text-success'
-                              : 'text-danger'
-                          }`}
-                        >
-                          {crypto.changePercent24Hr >= 0 ? (
-                            <TrendingUp size={16} className="me-1" />
-                          ) : (
-                            <TrendingDown size={16} className="me-1" />
-                          )}
-                          {formatPercentage(crypto.changePercent24Hr)}
-                        </div>
-                      </td>
-                      <td className="align-middle text-muted">
-                        {formatNumber(crypto.marketCapUsd)}
-                      </td>
-                      <td className="align-middle text-end">
-                        <div className="btn-group">
-                          <button className="btn btn-outline-secondary btn-sm">
-                            <Star size={16} />
-                          </button>
-                          <button className="btn btn-outline-secondary btn-sm">
-                            <Share2 size={16} />
-                          </button>
-                          <button className="btn btn-outline-secondary btn-sm">
-                            <MoreVertical size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>24h Change</h5>
+                <h3 className={bitcoin.changePercent24Hr >= 0 ? 'text-success' : 'text-danger'}>
+                  {formatPercentage(parseFloat(bitcoin.changePercent24Hr))}
+                  {bitcoin.changePercent24Hr >= 0 ? <TrendingUp size={24} /> : <TrendingDown size={24} />}
+                </h3>
+              </div>
+            </div>
+            <div className="col-lg-4 mb-4">
+              <div className="card bg-secondary text-light p-3">
+                <h5>Market Cap</h5>
+                <h3 className="text-info">{formatNumber(bitcoin.marketCapUsd)}</h3>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Chart Controls */}
+        <div className="btn-group mb-4">
+          {timeframeButtons.map(({ label, value }) => (
+            <button
+              key={value}
+              className={`btn ${
+                selectedTimeframe === value ? 'btn-primary' : 'btn-outline-secondary'
+              }`}
+              onClick={() => setSelectedTimeframe(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Price Chart */}
+        <h4 className="text-info">Price History</h4>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={priceHistory}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="time" tick={{ fill: '#fff' }} />
+            <YAxis tick={{ fill: '#fff' }} />
+            <Tooltip />
+            <Line type="monotone" dataKey="price" stroke="#0dcaf0" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+
+        {/* Technical Indicators Chart */}
+        <h4 className="text-info mt-5">Technical Indicators</h4>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={technicalData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="time" tick={{ fill: '#fff' }} />
+            <YAxis tick={{ fill: '#fff' }} />
+            <Tooltip />
+            <Line type="monotone" dataKey="sma" stroke="#ffc107" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="rsi" stroke="#dc3545" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
