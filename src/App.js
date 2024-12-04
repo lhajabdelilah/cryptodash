@@ -17,6 +17,8 @@ const CryptoDashboard = () => {
   const [selectedTimeframe, setSelectedTimeframe] = useState('m1'); // Valeur par défaut
   const [priceHistory, setPriceHistory] = useState([]);
   const [isDarkMode, setIsDarkMode] = useState(true); // État pour gérer le thème
+  const [yAxisDomain, setYAxisDomain] = useState([0, 100000]); // Initial range of the Y-axis (price)
+  const [xAxisDomain, setXAxisDomain] = useState([0, 10]); // X-Axis range (time)
 
   const SOCKET_URL = "http://localhost:5000"; // L'URL de votre backend Flask
   useEffect(() => {
@@ -57,20 +59,34 @@ const CryptoDashboard = () => {
       const url = `https://api.coincap.io/v2/assets/bitcoin/history?interval=${selectedTimeframe}`;
       const response = await fetch(url);
       const data = await response.json();
+      console.log(data); // Debugging line
+
       const formattedData = data.data.map((point) => ({
         time: new Date(point.time).toLocaleDateString() + ' ' + new Date(point.time).toLocaleTimeString(),
         price: parseFloat(point.priceUsd),
+        predicted_price: predictedPrice || null, // Add predicted price here
       }));
       setPriceHistory(formattedData);
+      setLoading(false);
     } catch (error) {
       console.error('Error fetching price history:', error);
+      setLoading(false);
     }
   };
 
-
   useEffect(() => {
     fetchPriceHistory();
-  }, [selectedTimeframe]);
+  }, [selectedTimeframe, predictedPrice]);  // Re-fetch when timeframe or predicted price changes
+
+  // Zoom-in handler
+  const zoomIn = () => {
+    setYAxisDomain([yAxisDomain[0], yAxisDomain[1] * 0.8]); // Zoom in by reducing the range (80% of the current range)
+  };
+
+  // Zoom-out handler
+  const zoomOut = () => {
+    setYAxisDomain([yAxisDomain[0], yAxisDomain[1] * 1.2]); // Zoom out by increasing the range (120% of the current range)
+  };
 
   // const formatNumber = (value) => {
   //   return new Intl.NumberFormat('en-US', {
@@ -135,7 +151,7 @@ const CryptoDashboard = () => {
       <div className="container py-5">
         {/* Header avec prix actuel de Bitcoin */}
         <div className="mb-5">
-          <h1 className="text-info mb-3">Crypto Dashboard</h1>
+          {/* <h1 className="text-info mb-3">Crypto Dashboard</h1> */}
           <h1 className="text-info">Crypto Dashboard</h1>
           <button
             className="btn btn-outline-primary"
@@ -187,30 +203,35 @@ const CryptoDashboard = () => {
 
  <BitcoinKpiChart/>
 
-        <div className="container-fluid py-4">
-        <h1 className="mb-4">Crypto Dashboard</h1>
-        <div className="btn-group mb-4">
-          {timeframeButtons.map(({ label, value }) => (
-            <button
-              key={value}
-              className={`btn ${
-                selectedTimeframe === value
-                  ? 'btn-primary'
-                  : 'btn-outline-secondary'
-              }`}
-              onClick={() => setSelectedTimeframe(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+ <div className="container-fluid py-4">
+      <h1 className="mb-4">Crypto Dashboard</h1>
+      <div className="btn-group mb-4">
+        {timeframeButtons.map(({ label, value }) => (
+          <button
+            key={value}
+            className={`btn ${selectedTimeframe === value ? 'btn-primary' : 'btn-outline-secondary'}`}
+            onClick={() => setSelectedTimeframe(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
+      <div className="zoom-controls mb-4">
+        <button className="btn btn-outline-primary" onClick={zoomIn}>Zoom In</button>
+        <button className="btn btn-outline-primary" onClick={zoomOut}>Zoom Out</button>
+      </div>
+
+      {loading ? (
+        <div>Loading...</div>
+      ) : (
         <ResponsiveContainer width="100%" height={400}>
           <LineChart data={priceHistory}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="time" tick={{ fill: '#fff' }} />
-            <YAxis tick={{ fill: '#fff' }} />
+            <YAxis tick={{ fill: '#fff' }} domain={yAxisDomain} /> {/* Use dynamic Y-axis domain */}
             <Tooltip />
+            {/* Line for actual price */}
             <Line
               type="monotone"
               dataKey="price"
@@ -218,9 +239,18 @@ const CryptoDashboard = () => {
               strokeWidth={2}
               dot={false}
             />
+            {/* Line for predicted price */}
+            <Line
+              type="monotone"
+              dataKey="predicted_price"
+              stroke="#ff6347"  // Different color for predicted line
+              strokeWidth={2}
+              dot={false}
+            />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      )}
+    </div>
         {/* Tableau descriptif */}
         <div className="table-responsive bg-secondary rounded p-4">
           <h4 className="text-light mb-4">Top Cryptocurrencies</h4>
