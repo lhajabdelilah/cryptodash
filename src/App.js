@@ -11,6 +11,8 @@ import BitcoinKpiChart from './kpi';
 
 const CryptoDashboard = () => {
   const [predictedPrice, setPredictedPrice] = useState(null);
+  const [chatPredict, setChatPredict] = useState(null);
+
   const [cryptoData, setCryptoData] = useState([]);
   const [bitcoin, setBitcoin] = useState({});
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,9 @@ const CryptoDashboard = () => {
     // Écouter les mises à jour du prix
     socket.on("update_price", (data) => {
       setPredictedPrice(data.predicted_price);
+      setChatPredict(data.chat_prediction);
     });
+    
 
     // Déconnexion propre lorsque le composant est démonté
     return () => {
@@ -153,6 +157,7 @@ const CryptoDashboard = () => {
         <div className="mb-5">
           {/* <h1 className="text-info mb-3">Crypto Dashboard</h1> */}
           <h1 className="text-info">Crypto Dashboard</h1>
+          <h5>{chatPredict}</h5>
           <button
             className="btn btn-outline-primary"
             onClick={toggleTheme}
@@ -190,12 +195,14 @@ const CryptoDashboard = () => {
             <div className="col-lg-4 mb-4">
               <div className="card bg-secondary text-light p-3">
                 <h5>predicted price</h5>
-                <h3 className="text-info">{predictedPrice !== null ? (
-                <p> {predictedPrice.toFixed(2)} USD</p>
+                <h3 className="text-info">
+                  {typeof predictedPrice === 'number' ? (
+                    <p>{predictedPrice.toFixed(2)} USD</p>
                   ) : (
                     <p>Chargement des données...</p>
                   )}
-              </h3>
+                </h3>
+
               </div>
             </div>
           </div>
