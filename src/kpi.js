@@ -171,7 +171,7 @@ const BitcoinKpiChart = () => {
               )}
               {selectedKpis.supply && (
                 <Line
-                  yAxisId="right"
+                  yAxisId="right"  
                   type="monotone"
                   dataKey="supply"
                   stroke="#198754"
