@@ -17,16 +17,10 @@ import { GiCrystalBall } from 'react-icons/gi';
 import { RiExchangeDollarLine } from 'react-icons/ri';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { io } from "socket.io-client";
+import BitcoinKpiChart from './kpi';
 
 // Placeholder for BitcoinKpiChart (since original wasn't provided)
-const BitcoinKpiChart = () => {
-  return (
-    <div className="container-fluid mb-4">
-      <h3>Bitcoin KPI Chart Placeholder</h3>
-      <p>KPI Chart content would be rendered here</p>
-    </div>
-  );
-};
+
 
 const CryptoDashboard = () => {
   const [predictedPrice, setPredictedPrice] = useState(null);
